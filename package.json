@@ -1,0 +1,13 @@
+{
+  "name": "word-spreaders-cms",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npx directus start"
+  },
+  "author": "Brian Hofmann",
+  "dependencies": {
+    "directus": "^10.0.0",
+    "pg": "^8.10.0"
+  }
+}
