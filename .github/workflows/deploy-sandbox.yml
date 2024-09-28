@@ -1,0 +1,95 @@
+name: Deploy to Sandbox
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["develop"]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: sandbox
+
+    steps:
+      - name: Checkout Develop
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DIGITAL_OCEAN_REGISTRY }}/ets-template-sites-cms:$(echo $GITHUB_SHA | head -c7) .
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITAL_OCEAN_TOKEN }}
+
+      - name: Login to Digital Ocean Container Registry
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Push Image to Container Registry
+        run: docker push ${{ secrets.DIGITAL_OCEAN_REGISTRY }}/ets-template-sites-cms:$(echo $GITHUB_SHA | head -c7)
+
+      - name: Set up Kubernetes Context
+        run: doctl kubernetes cluster kubeconfig save --expiry-seconds 600 ets-template-sites-cms-sandbox
+
+      - name: Deploy to Kubernetes
+        run: |
+          if kubectl get deployment ets-template-sites-cms-sandbox --ignore-not-found | grep -q 'ets-template-sites-cms-sandbox'; then
+            echo "Deployment exists, updating image..."
+            kubectl set image deployment/ets-template-sites-cms-sandbox *=${{ secrets.DIGITAL_OCEAN_REGISTRY }}/ets-template-sites-cms:$(echo $GITHUB_SHA | head -c7)
+          else
+            echo "Creating deployment"
+            kubectl create deployment ets-template-sites-cms-sandbox --image=${{ secrets.DIGITAL_OCEAN_REGISTRY }}/ets-template-sites-cms:$(echo $GITHUB_SHA | head -c7)
+          fi
+
+      - name: Set Environment Variables
+        run: |
+          echo "${{ secrets.DB_SSL__CA_BASE64 }}" | base64 --decode > /tmp/ca-cert.crt
+          kubectl set env deployment/ets-template-sites-cms-sandbox \
+          KEY=${{ secrets.DIRECTUS_KEY }} \
+          SECRET=${{ secrets.DIRECTUS_SECRET }} \
+          DB_CLIENT=${{ vars.DB_CLIENT }} \
+          DB_HOST=${{ vars.DB_HOST }} \
+          DB_PORT=${{ vars.DB_PORT }} \
+          DB_DATABASE=${{ vars.DB_DATABASE }} \
+          DB_USER=${{ secrets.DB_USER }} \
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+          DB_SSL__CA="/tmp/ca-cert.crt" \
+          DB_SSL__REJECT_UNAUTHORIZED="false" \
+          NODE_TLS_REJECT_UNAUTHORIZED="0" \
+          STORAGE_LOCATIONS="digitalocean" \
+          STORAGE_DIGITALOCEAN_DRIVER="s3" \
+          STORAGE_DIGITALOCEAN_REGION="nyc3" \
+          STORAGE_DIGITALOCEAN_ENDPOINT="https://nyc3.digitaloceanspaces.com" \
+          STORAGE_DIGITALOCEAN_BUCKET="ets-template-sites-sandbox" \
+          STORAGE_DIGITALOCEAN_KEY=${{ secrets.STORAGE_DIGITALOCEAN_KEY }} \
+          STORAGE_DIGITALOCEAN_SECRET=${{ secrets.STORAGE_DIGITALOCEAN_SECRET }} \
+          CORS_ENABLED=${{ vars.CORS_ENABLED }} \
+          CORS_ORIGIN=${{ vars.CORS_ORIGIN }} \
+          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
+
+      - name: Create Load Balancer Service
+        run: |
+          if kubectl get service ets-template-sites-cms-sandbox-load-balancer --ignore-not-found | grep -q 'ets-template-sites-cms-sandbox-load-balancer'; then
+            echo "Load balancer service already exists"
+          else
+            echo "Creating Load Balancer Service..."
+            kubectl expose deployment ets-template-sites-cms-sandbox --type=LoadBalancer --name=ets-template-sites-cms-sandbox-load-balancer --port=80,443 --target-port=8055
+            kubectl annotate service ets-template-sites-cms-sandbox-load-balancer \
+              service.beta.kubernetes.io/do-loadbalancer-name="ets-template-sites-sandbox-load-balancer" \
+              service.beta.kubernetes.io/do-loadbalancer-protocol="http" \
+              service.beta.kubernetes.io/do-loadbalancer-tls-ports="443" \
+              service.beta.kubernetes.io/do-loadbalancer-certificate-name="ets-main" \
+              service.beta.kubernetes.io/do-loadbalancer-redirect-http-to-https="true" \
+              service.beta.kubernetes.io/do-loadbalancer-override-health-check="true" \
+              service.beta.kubernetes.io/do-loadbalancer-healthcheck-protocol="http"
+              service.beta.kubernetes.io/do-loadbalancer-healthcheck-port="80" \
+              service.beta.kubernetes.io/do-loadbalancer-healthcheck-path="/server/health"
+          fi
+
+      - name: Verify Deployment
+        run: kubectl rollout status deployment/ets-template-sites-cms-sandbox
+
+
+
+
