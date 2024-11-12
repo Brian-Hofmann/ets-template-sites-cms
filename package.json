@@ -7,7 +7,7 @@
   },
   "author": "Brian Hofmann",
   "dependencies": {
-    "directus": "^11.1.0",
+    "directus": "^11.2.1",
     "pg": "^8.11.3"
   }
 }

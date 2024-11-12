@@ -67,6 +67,7 @@ jobs:
           CORS_ORIGIN=${{ vars.CORS_ORIGIN }} \
           ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }} \
           ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }} \
+          REFRESH_TOKEN_TTL="4h" \
 
       - name: Create Load Balancer Service
         run: |
