@@ -6,7 +6,12 @@ This is the CMS repository for [ETS Template Sites](https://github.com/Brian-Hof
 
 Add a file called ".env" to the root folder and put the following contents which is normally generated from the directus init command
 
-The necessary properties to set are the uncommented DB_*, KEY, and SECRET
+The necessary properties to set are the uncommented DB_*, KEY, and SECRET. If you did not setup directus with the init command, then you can also specify the admin username and password by adding
+
+ADMIN_EMAIL
+ADMIN_PASSWORD
+
+to the below file. If you do not add those, directus will auto generate a username and password for you
 
 ```yml
 ####################################################################################################
